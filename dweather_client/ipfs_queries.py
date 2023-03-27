@@ -19,6 +19,8 @@ from dweather_client.http_queries import get_heads
 import pandas as pd
 from array import array
 from io import BytesIO
+import platform, multiaddr
+DAEMON_ADDRESS = multiaddr.Multiaddr('/dns4/172.17.0.6/tcp/5001/http') if not 'macOS' in platform.platform() else multiaddr.Multiaddr('/dns4/0.0.0.0/tcp/5001/http')
 
 
 METADATA_FILE = "metadata.json"
@@ -44,7 +46,8 @@ class IpfsDataset(ABC):
         code is running in an environment containing all datasets (such as gateway)
         """
         self.on_gateway = not ipfs_timeout
-        self.ipfs = ipfshttpclient.connect(timeout=ipfs_timeout, session=True)
+        self.ipfs = ipfshttpclient.connect(DAEMON_ADDRESS, timeout=ipfs_timeout)
+        # self.ipfs = ipfshttpclient.connect(timeout=ipfs_timeout, session=True)
         self.as_of = as_of
 
     def __enter__(self):
