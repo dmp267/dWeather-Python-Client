@@ -9,7 +9,8 @@ from dweather_client.aliases_and_units import \
 from dweather_client.struct_utils import tupleify, convert_nans_to_none
 import datetime
 import pytz
-import csv, json
+import csv
+import json
 import inspect
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from astropy import units as u
 from timezonefinder import TimezoneFinder
 from dweather_client import gridded_datasets
 from dweather_client.storms_datasets import IbtracsDataset, AtcfDataset, SimulatedStormsDataset
-from dweather_client.ipfs_queries import AustraliaBomStations, CedaBiomass, CmeStationsDataset, DutchStationsDataset, DwdStationsDataset, DwdHourlyStationsDataset, GlobalHourlyStationsDataset, JapanStations, StationDataset,\
+from dweather_client.ipfs_queries import AustraliaBomStations, CedaBiomass, CmeStationsDataset, DutchStationsDataset, DwdStationsDataset, DwdHourlyStationsDataset, GlobalHourlyStationsDataset, JapanStations, StationDataset, EauFranceDataset,\
     YieldDatasets, FsaIrrigationDataset, AemoPowerDataset, AemoGasDataset, AesoPowerDataset, ForecastDataset, AfrDataset, DroughtMonitor, CwvStations, SpeedwellStations, TeleconnectionsDataset, CsvStationDataset, StationForecastDataset
 from dweather_client.slice_utils import DateRangeRetriever, has_changed
 from dweather_client.ipfs_errors import *
@@ -246,6 +247,7 @@ def get_tropical_storms(
         min_lon=None,
         max_lat=None,
         max_lon=None,
+        as_of=None,
         ipfs_timeout=None):
     """
     return:
@@ -288,11 +290,11 @@ def get_tropical_storms(
 
     with cm as storm_getter:
         if radius:
-            return storm_getter.get_data(basin, radius=radius, lat=lat, lon=lon)
+            return storm_getter.get_data(basin, radius=radius, lat=lat, lon=lon, as_of=as_of)
         elif min_lat:
-            return storm_getter.get_data(basin, min_lat=min_lat, min_lon=min_lon, max_lat=max_lat, max_lon=max_lon)
+            return storm_getter.get_data(basin, min_lat=min_lat, min_lon=min_lon, max_lat=max_lat, max_lon=max_lon, as_of=as_of)
         else:
-            return storm_getter.get_data(basin)
+            return storm_getter.get_data(basin, as_of=as_of)
 
 
 def get_station_history(
@@ -485,6 +487,7 @@ def get_hourly_station_history(dataset, station_id, weather_variable, use_imperi
         v) for k, v in final_resp_series.to_dict().items()}
     return result
 
+
 def get_csv_station_history(dataset, station_id, weather_variable, use_imperial_units=True, desired_units=None, ipfs_timeout=None):
     """
     This is almost an exact copy of get_hourly_station_history
@@ -543,14 +546,26 @@ def get_csv_station_history(dataset, station_id, weather_variable, use_imperial_
             "Invalid weather variable for this station")
 
     try:
-        if dataset == "inmet_brazil-hourly":
+        # RawSet style where we only want the most recent file
+        if dataset in ["inmet_brazil-hourly"]:
             with CsvStationDataset(dataset=dataset, ipfs_timeout=ipfs_timeout) as dataset_obj:
-                csv_text = dataset_obj.get_data(station_id, weather_variable)
+                csv_text_list = [dataset_obj.get_data(
+                    station_id, weather_variable)]
+        # ClimateSet style where we need the entire linked list history
+        elif dataset in ["ne_iso-hourly"]:
+            with CsvStationDataset(dataset=dataset, ipfs_timeout=ipfs_timeout) as dataset_obj:
+                csv_text_list = dataset_obj.get_data_recursive(
+                    station_id, weather_variable)
         else:
             raise DatasetError("No such dataset in dClimate")
     except ipfshttpclient.exceptions.ErrorResponse:
         raise StationNotFoundError("Invalid station ID for dataset")
-    df = pd.read_csv(StringIO(csv_text))
+
+    # concat together all retrieved station csv texts
+    dfs = []
+    for csv_text in csv_text_list:
+        dfs.append(pd.read_csv(StringIO(csv_text)))
+    df = pd.concat(dfs, ignore_index=True)
     str_resp_series = df[column_name].astype(str)
     df = df.set_index("dt")
     if desired_units:
@@ -579,8 +594,9 @@ def get_csv_station_history(dataset, station_id, weather_variable, use_imperial_
         v) for k, v in final_resp_series.to_dict().items()}
     return result
 
+
 def get_station_forecast_history(dataset, station_id, forecast_date, desired_units=None, ipfs_timeout=None):
-    try: 
+    try:
         with StationForecastDataset(dataset, ipfs_timeout=ipfs_timeout) as dataset_obj:
             csv_text = dataset_obj.get_data(station_id, forecast_date)
             history = {}
@@ -588,9 +604,11 @@ def get_station_forecast_history(dataset, station_id, forecast_date, desired_uni
             headers = next(reader)
             date_col = headers.index('DATE')
             try:  # Make sure weather variable is correct.
-                data_col = headers.index("SETT") #at the moment the only variable is "SETT"
+                # at the moment the only variable is "SETT"
+                data_col = headers.index("SETT")
             except ValueError:
-                raise WeatherVariableNotFoundError("Invalid weather variable for this station")
+                raise WeatherVariableNotFoundError(
+                    "Invalid weather variable for this station")
             for row in reader:
                 try:
                     if not row:
@@ -599,10 +617,11 @@ def get_station_forecast_history(dataset, station_id, forecast_date, desired_uni
                         row[date_col], "%Y-%m-%d").date()] = float(row[data_col])
                 except ValueError:
                     history[datetime.datetime.strptime(
-                        row[date_col], "%Y-%m-%d").date()] = row[data_col]        
+                        row[date_col], "%Y-%m-%d").date()] = row[data_col]
             return history
     except ipfshttpclient.exceptions.ErrorResponse:
         raise StationNotFoundError("Invalid station ID for dataset")
+
 
 def get_station_forecast_stations(dataset, forecast_date, desired_units=None, ipfs_timeout=None):
     with StationForecastDataset(dataset, ipfs_timeout=ipfs_timeout) as dataset_obj:
@@ -850,13 +869,13 @@ def has_dataset_updated(dataset, slices, as_of, ipfs_timeout=None):
 
 def get_teleconnections_history(weather_variable, ipfs_timeout=None):
     with TeleconnectionsDataset(ipfs_timeout=ipfs_timeout) as dataset_obj:
-        csv_text = dataset_obj.get_data()
+        csv_text = dataset_obj.get_data(weather_variable)
         history = {}
         reader = csv.reader(csv_text.split('\n'))
         headers = next(reader)
         date_col = headers.index('DATE')
-        try:  # Make sure weather variable is correct.
-            data_col = headers.index(weather_variable)
+        try:
+            data_col=headers.index("value")
         except ValueError:
             raise WeatherVariableNotFoundError(
                 "Invalid weather variable for this station")
@@ -874,3 +893,40 @@ def get_teleconnections_history(weather_variable, ipfs_timeout=None):
                 history[datetime.datetime.strptime(
                     row[date_col], "%Y-%m-%d").date()] = row[data_col]
         return history
+
+
+def get_eaufrance_history(station, weather_variable, use_imperial_units=False, desired_units=None, ipfs_timeout=None):
+    try:
+        with EauFranceDataset(ipfs_timeout=ipfs_timeout) as dataset_obj:
+            csv_text = dataset_obj.get_data(station)
+            df = pd.read_csv(StringIO(csv_text))
+            df = df.set_index("DATE")
+            original_units = "m^3/s"
+            if desired_units:
+                converter, dweather_unit = get_unit_converter_no_aliases(
+                    original_units, desired_units)
+            else:
+                converter, dweather_unit = get_unit_converter(
+                    original_units, use_imperial_units)
+            if converter:
+                try:
+                    converted_resp_series = pd.Series(
+                        converter(df[weather_variable].values*dweather_unit), index=df.index)
+                except ValueError:
+                    raise UnitError(
+                        f"Specified unit is incompatible with original, original units are {original_units} and requested units are {desired_units}")
+                if desired_units is not None:
+                    rounded_resp_array = np.vectorize(rounding_formula_temperature)(
+                        str_resp_series, converted_resp_series)
+                    final_resp_series = pd.Series(
+                        rounded_resp_array * converted_resp_series.values.unit, index=df.index)
+                else:
+                    final_resp_series = converted_resp_series
+            else:
+                final_resp_series = pd.Series(
+                    df[weather_variable].values*dweather_unit, index=df.index)
+            result = {datetime.date.fromisoformat(k): convert_nans_to_none(
+                v) for k, v in final_resp_series.to_dict().items()}
+        return result
+    except ipfshttpclient.exceptions.ErrorResponse:
+        raise StationNotFoundError("Invalid station ID for dataset")
