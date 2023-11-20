@@ -929,6 +929,43 @@ class CwvStations(GriddedDataset):
         return data_dict
 
 
+class SapStations(GriddedDataset):
+    """
+    Instantiable class for Composite Weather Variable Station Data
+    """
+    @property
+    def dataset(self):
+        return "sap-daily"
+
+    @property
+    def data_file_format(self):
+        """
+        format string requires station name eg 'EM'
+        """
+        return "sap_update_UK.txt"
+
+    def get_data(self):
+        super().get_data()
+        hashes = self.get_hashes()
+        ret_dict = {}
+        for h in hashes:
+            date_range = self.get_date_range_from_metadata(h)
+            new_dict = self.extract_data_from_text(date_range, h)
+            ret_dict = {**ret_dict, **new_dict}
+        return pd.Series(ret_dict)
+
+    def extract_data_from_text(self, date_range, ipfs_hash):
+        byte_obj = self.get_file_object(
+            f"{ipfs_hash}/{self.data_file_format}")
+        data = byte_obj.read().decode("utf-8").split(",")
+        day_itr = date_range[0].date()
+        data_dict = {}
+        for point in data:
+            data_dict[day_itr] = point
+            day_itr += datetime.timedelta(days=1)
+        return data_dict
+
+
 class AustraliaBomStations(GriddedDataset):
     """
     Instantiable class for Australia BOM Data
@@ -1185,8 +1222,9 @@ class ForecastDataset(GriddedDataset):
             file_name = f"{forecast_date.strftime('%Y%m%d')}_{lat:.2f}_{lon:.2f}"
             with zi.open(file_name) as f:
                 vals = f.read().decode("utf-8").split(',')
+                start_hour = 1 if "gfs" in self._dataset else 0
                 start_datetime = datetime.datetime(
-                    forecast_date.year, forecast_date.month, forecast_date.day)
+                    forecast_date.year, forecast_date.month, forecast_date.day, hour=start_hour)
                 for i, val in enumerate(vals):
                     ret[start_datetime +
                         datetime.timedelta(hours=i*self._interval)] = val
@@ -1253,7 +1291,7 @@ class TeleconnectionsDataset(IpfsDataset):
     def get_data(self, station):
         super().get_data()
         metadata = self.get_metadata(self.head)
-        
+
         file_name = f"{self.head}/{station}.csv"
         return self.get_file_object(file_name).read().decode("utf-8")
 
