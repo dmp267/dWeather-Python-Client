@@ -75,7 +75,10 @@ def get_v3_metadata_from_name(dataset_name):
     r.raise_for_status()
     result = r.json()
     print(f'result: {result}')
-    return result
+
+    raise Exception('v3 requests not supported currently')
+    # need gateway to get IPFS hashes for v3 datasets
+    # return result
 
 
 class IpfsDataset(ABC):

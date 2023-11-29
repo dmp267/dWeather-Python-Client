@@ -30,7 +30,7 @@ setuptools.setup(
     description="Python client for interacting with weather data on IPFS.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Arbol-Project/dWeather-Python-Client.git",
+    url="https://github.com/dmp267/dWeather-Python-Client.git",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
