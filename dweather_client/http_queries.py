@@ -5,7 +5,37 @@ import os, pickle, math, requests, datetime, io, gzip, json, logging, csv, tarfi
 from collections import Counter, deque
 from dweather_client.ipfs_errors import *
 
-GATEWAY_URL = 'https://gateway.arbolmarket.com'
+ADAPTER_SECRETS = os.getenv("ADAPTER_SECRETS", None)
+ARBOL_GATEWAY_URL = os.getenv("ARBOL_GATEWAY_URL", None)
+ARBOL_GATEWAY_USERNAME = os.getenv("ARBOL_GATEWAY_USERNAME", None)
+ARBOL_GATEWAY_PASSWORD = os.getenv("ARBOL_GATEWAY_PASSWORD", None)
+DCLIMATE_API_KEY = os.getenv("DCLIMATE_API_KEY", None)
+if ADAPTER_SECRETS is not None:
+    ARBOL_GATEWAY_URL = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_URL", ARBOL_GATEWAY_URL)
+    ARBOL_GATEWAY_USERNAME = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_USERNAME", ARBOL_GATEWAY_USERNAME)
+    ARBOL_GATEWAY_PASSWORD = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_PASSWORD", ARBOL_GATEWAY_PASSWORD)
+    DCLIMATE_API_KEY = json.loads(ADAPTER_SECRETS).get("DCLIMATE_API_KEY", DCLIMATE_API_KEY)
+print(f'ARBOL GATEWAY URL: {ARBOL_GATEWAY_URL}')
+GATEWAY_URL = f'https://{ARBOL_GATEWAY_USERNAME}:{ARBOL_GATEWAY_PASSWORD}@{ARBOL_GATEWAY_URL}'
+print(f'GATEWAY URL (length): {len(GATEWAY_URL)}')
+print(f'DCLIMATE API KEY (length): {len(DCLIMATE_API_KEY)}')
+# GATEWAY_URL = 'https://gateway.arbolmarket.com'
+
+
+def get_dclimate_metadata(dataset_name, url=GATEWAY_URL):
+    """
+    Get the metadata file for a dataset name.
+    Args:
+        url (str): the url of the IPFS server
+    """
+    headers = {"Authorization": DCLIMATE_API_KEY}
+    r = requests.get(f"http://api.dclimate/apiv3/metadata/{dataset_name}?full_metadata=false", headers=headers)
+    r.raise_for_status()
+    result = r.json()
+    print(f'result: {result}')
+    # raise Exception('v3 requests not supported currently')
+    return result
+
 
 def get_heads(url=GATEWAY_URL):
     """
@@ -22,7 +52,8 @@ def get_heads(url=GATEWAY_URL):
             'cpc_us-monthly': 'Qm...'
         }
     """
-    hashes_url = url + "/climate/hashes/heads.json"
+    # hashes_url = url + "/climate/hashes/heads.json"
+    hashes_url = url + "/heads.json"
     r = requests.get(hashes_url)
     r.raise_for_status()
     return r.json()

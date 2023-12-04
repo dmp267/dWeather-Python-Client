@@ -16,19 +16,17 @@ import zipfile
 from dweather_client.ipfs_errors import *
 from dweather_client.grid_utils import conventional_lat_lon_to_cpc, cpc_lat_lon_to_conventional
 from dweather_client.struct_utils import find_closest_lat_lon
-# from dweather_client.http_queries import get_heads
+from dweather_client.http_queries import get_heads
 import pandas as pd
 from array import array
 from io import BytesIO
 import multiaddr
 
-DEFAULT_PEER = "/ip4/45.55.32.80/tcp/4001/p2p/12D3KooWG7itEPAHut3xsVo7CwyD8sKeQXKgQizotNhPsToCssXQ"
+DEFAULT_PEER = "/ip4/198.211.104.50/tcp/4001/p2p/QmWsAFSDajELyneR7LkMsgfaRk2ib1y3SEU7nQuXSNPsQV"
 ADAPTER_SECRETS = os.getenv("ADAPTER_SECRETS", None)
 IPFS_HOST = os.getenv("IPFS_HOST", None)
-DCLIMATE_API_KEY = os.getenv("DCLIMATE_API_KEY", None)
 if ADAPTER_SECRETS is not None:
     IPFS_HOST = json.loads(ADAPTER_SECRETS).get("IPFS_HOST", IPFS_HOST)
-    DCLIMATE_API_KEY = json.loads(ADAPTER_SECRETS).get("DCLIMATE_API_KEY", DCLIMATE_API_KEY)
 if not IPFS_HOST:
     host = "0.0.0.0"
     port = "5001"
@@ -36,49 +34,9 @@ else:
     host, port = IPFS_HOST.split(":")
 DAEMON_ADDRESS = multiaddr.Multiaddr(f'/dns4/{host}/tcp/{port}/http')
 print(f'DAEMON ADDRESS: {DAEMON_ADDRESS}')
-print(f'DCLIMATE API KEY (length): {len(DCLIMATE_API_KEY)}')
 
 METADATA_FILE = "metadata.json"
 # GATEWAY_IPFS_ID = "/ip4/134.122.126.13/tcp/4001/p2p/12D3KooWM8nN6VbUka1NeuKnu9xcKC56D17ApAVRDyfYNytzUsqG"
-
-
-def get_v3_metadata_from_name(dataset_name):
-    """
-    Get the metadata file for a dataset name.
-    Args:
-        url (str): the url of the IPFS server
-        hash_str (str): the hash of the ipfs dataset
-    Returns (example metadata.json):
-    
-        {
-            'date range': [
-                '1981/01/01',
-                '2019/07/31'
-            ],
-            'entry delimiter': ',',
-            'latitude range': [
-                -49.975, 49.975
-            ],
-            'longitude range': [
-                -179.975, 179.975]
-            ,
-            'name': 'CHIRPS .05 Daily Full Set Uncompressed',
-            'period': 'daily',
-            'precision': 0.01,
-            'resolution': 0.05,
-            'unit of measurement': 'mm',
-            'year delimiter': '\n'
-        }
-    """
-    headers = {"Authorization": DCLIMATE_API_KEY}
-    r = requests.get(f"http://api.dclimate/apiv3/metadata/{dataset_name}?full_metadata=false", headers=headers)
-    r.raise_for_status()
-    result = r.json()
-    print(f'result: {result}')
-
-    raise Exception('v3 requests not supported currently')
-    # need gateway to get IPFS hashes for v3 datasets
-    # return result
 
 
 class IpfsDataset(ABC):
@@ -102,6 +60,7 @@ class IpfsDataset(ABC):
         self.on_gateway = not ipfs_timeout
         # self.ipfs = ipfshttpclient.connect(timeout=ipfs_timeout, session=True)
         self.ipfs = ipfshttpclient.connect(DAEMON_ADDRESS, timeout=ipfs_timeout, session=True)
+        self.ipfs._client.request('/swarm/connect', (DEFAULT_PEER))
         self.as_of = as_of
 
     def __enter__(self):
@@ -120,10 +79,6 @@ class IpfsDataset(ABC):
         return:
             metadata as dict
         """
-        # if not self.on_gateway:
-        #     print(f'connecting to {DEFAULT_PEER}')
-        #     # self.ipfs._client.request('/swarm/connect', (GATEWAY_IPFS_ID,))
-        #     self.ipfs._client.request('/swarm/connect', (DEFAULT_PEER))
         metadata = self.ipfs.cat(f"{h}/{METADATA_FILE}").decode('utf-8')
         return json.loads(metadata)
 
@@ -134,9 +89,8 @@ class IpfsDataset(ABC):
         return:
             content of file as file-like bytes object
         """
-        if not self.on_gateway:
+        # if not self.on_gateway:
             # self.ipfs._client.request('/swarm/connect', (GATEWAY_IPFS_ID,))
-            self.ipfs._client.request('/swarm/connect', (DEFAULT_PEER))
         return BytesIO(self.ipfs.cat(f))
 
     def traverse_ll(self, head, as_of=None):
@@ -172,7 +126,7 @@ class IpfsDataset(ABC):
         Exposed method that allows user to get data in the dataset. Args and return value will depend on whether
         this is a gridded, station or storm dataset
         """
-        self.head = get_v3_metadata_from_name(self.dataset)
+        self.head = get_heads()[self.dataset]
 
 
 class GriddedDataset(IpfsDataset):
@@ -1314,26 +1268,26 @@ class ForecastDataset(GriddedDataset):
         return (float(ret_lat), float(ret_lon)), pd.Series(weather_dict)
 
 
-# class StationForecastDataset(ForecastDataset):
-#     """
-#     Instantiable class for pulling in station data that is also forecast data. 
-#     Currently the datasets that meet this style are: cme_futures
-#     """
-#     @property
-#     def dataset(self):
-#         return self._dataset
+class StationForecastDataset(ForecastDataset):
+    """
+    Instantiable class for pulling in station data that is also forecast data. 
+    Currently the datasets that meet this style are: cme_futures
+    """
+    @property
+    def dataset(self):
+        return self._dataset
 
-#     def __init__(self, dataset, **kwargs):
-#         super().__init__(dataset, 1)
-#         self.head = get_heads()[self.dataset]
+    def __init__(self, dataset, **kwargs):
+        super().__init__(dataset, 1)
+        self.head = get_heads()[self.dataset]
 
-#     def get_data(self, station, forecast_date):
-#         relevant_hash = self.get_relevant_hash(forecast_date)
-#         return self.get_file_object(f"{relevant_hash}/{station}.csv").read().decode("utf-8")
+    def get_data(self, station, forecast_date):
+        relevant_hash = self.get_relevant_hash(forecast_date)
+        return self.get_file_object(f"{relevant_hash}/{station}.csv").read().decode("utf-8")
 
-#     def get_stations(self, forecast_date):
-#         relevant_hash = self.get_relevant_hash(forecast_date)
-#         return self.get_file_object(f"{relevant_hash}/stations.json").read().decode("utf-8")
+    def get_stations(self, forecast_date):
+        relevant_hash = self.get_relevant_hash(forecast_date)
+        return self.get_file_object(f"{relevant_hash}/stations.json").read().decode("utf-8")
 
 
 class TeleconnectionsDataset(IpfsDataset):
