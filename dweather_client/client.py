@@ -71,7 +71,8 @@ def get_gridcell_history(
     will get the appropriate metric unit from aliases_and_units
     """
     try:
-        metadata = get_metadata(get_heads()[dataset])
+        # metadata = get_metadata(get_heads()[dataset])
+        metadata = get_metadata(dataset)
     except KeyError:
         raise DatasetError("No such dataset in dClimate")
 
@@ -159,7 +160,8 @@ def get_forecast(
         raise TypeError("Forecast date must be datetime.date")
 
     try:
-        metadata = get_metadata(get_heads()[dataset])
+        # metadata = get_metadata(get_heads()[dataset])
+        metadata = get_metadata(dataset)
     except KeyError:
         raise DatasetError("No such dataset in dClimate")
 
@@ -388,7 +390,8 @@ def get_cme_station_history(station_id, weather_variable, use_imperial_units=Tru
         raise DatasetError("No such dataset in dClimate")
     except ipfshttpclient.exceptions.ErrorResponse:
         raise StationNotFoundError("Invalid station ID for dataset")
-    metadata = get_metadata(get_heads()["cme_temperature_stations-daily"])
+    # metadata = get_metadata(get_heads()["cme_temperature_stations-daily"])
+    metadata = get_metadata("cme_temperature_stations-daily")
     unit = metadata["stations"][station_id]
     if desired_units:
         converter, dweather_unit = get_unit_converter_no_aliases(
@@ -435,7 +438,8 @@ def get_cme_station_history(station_id, weather_variable, use_imperial_units=Tru
 def get_hourly_station_history(dataset, station_id, weather_variable, use_imperial_units=True, desired_units=None, ipfs_timeout=None):
     # Get original units from metadata
     original_units = None
-    metadata = get_metadata(get_heads()[dataset])
+    # metadata = get_metadata(get_heads()[dataset])
+    metadata = get_metadata(dataset)
     station_metadata = metadata["station_metadata"][station_id]
     for climate_var in station_metadata:
         if climate_var['name'] == weather_variable:
@@ -496,7 +500,8 @@ def get_csv_station_history(dataset, station_id, weather_variable, use_imperial_
     """
     # Get original units from metadata
     original_units = None
-    metadata = get_metadata(get_heads()[dataset])
+    # metadata = get_metadata(get_heads()[dataset])
+    metadata = get_metadata(dataset)
     # This is a list of possible variables with units
     # iterate through to see if the required variable is
     # available from the dataset queried
@@ -639,9 +644,11 @@ def get_european_station_history(dataset, station_id, weather_variable, use_impe
             csv_text = dataset_obj.get_data(station_id)
     except KeyError:
         raise DatasetError("No such dataset in dClimate")
-    except ipfshttpclient.exceptions.ErrorResponse:
+    except ipfshttpclient.exceptions.ErrorResponse as e:
+        print(f'ipfs error: {e}')
         raise StationNotFoundError("Invalid station ID for dataset")
-    metadata = get_metadata(get_heads()[dataset])
+    # metadata = get_metadata(get_heads()[dataset])
+    metadata = get_metadata(dataset)
 
     station_metadata = metadata["station_metadata"][station_id]
     try:
@@ -735,7 +742,8 @@ def get_japan_station_history(station_name, desired_units=None, as_of=None, ipfs
     return:
         dict with datetime keys and temperature Quantities as values
     """
-    metadata = get_metadata(get_heads()["japan_meteo-daily"])
+    # metadata = get_metadata(get_heads()["japan_meteo-daily"])
+    metadata = get_metadata("japan_meteo-daily")
     with JapanStations(ipfs_timeout=ipfs_timeout, as_of=as_of) as dataset_obj:
         str_resp_series = dataset_obj.get_data(station_name)
     resp_series = str_resp_series.astype(float)
@@ -762,7 +770,8 @@ def get_cwv_station_history(station_name, as_of=None, ipfs_timeout=None):
     return:
         dict with datetime keys and cwv Quantities as values
     """
-    metadata = get_metadata(get_heads()["cwv-daily"])
+    # metadata = get_metadata(get_heads()["cwv-daily"])
+    metadata = get_metadata("cwv-daily")
     with CwvStations(ipfs_timeout=ipfs_timeout, as_of=as_of) as dataset_obj:
         str_resp_series = dataset_obj.get_data(station_name)
     resp_series = str_resp_series.astype(float)
@@ -775,7 +784,8 @@ def get_sap_station_history(as_of=None, ipfs_timeout=None):
     return:
         dict with datetime keys and sap Quantities as values
     """
-    metadata = get_metadata(get_heads()["sap-daily"])
+    # metadata = get_metadata(get_heads()["sap-daily"])
+    metadata = get_metadata("sap-daily")
     with SapStations(ipfs_timeout=ipfs_timeout, as_of=as_of) as dataset_obj:
         str_resp_series = dataset_obj.get_data()
     resp_series = str_resp_series.astype(float)

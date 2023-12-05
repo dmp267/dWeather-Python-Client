@@ -22,18 +22,16 @@ print(f'DCLIMATE API KEY (length): {len(DCLIMATE_API_KEY)}')
 # GATEWAY_URL = 'https://gateway.arbolmarket.com'
 
 
-def get_dclimate_metadata(dataset_name, url=GATEWAY_URL):
+def get_dclimate_metadata(dataset_name):
     """
     Get the metadata file for a dataset name.
     Args:
         url (str): the url of the IPFS server
     """
     headers = {"Authorization": DCLIMATE_API_KEY}
-    r = requests.get(f"http://api.dclimate/apiv3/metadata/{dataset_name}?full_metadata=false", headers=headers)
+    r = requests.get(f"https://api.dclimate.net/apiv3/metadata/{dataset_name}?full_metadata=false", headers=headers)
     r.raise_for_status()
     result = r.json()
-    print(f'result: {result}')
-    # raise Exception('v3 requests not supported currently')
     return result
 
 

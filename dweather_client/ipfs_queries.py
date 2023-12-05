@@ -22,21 +22,28 @@ from array import array
 from io import BytesIO
 import multiaddr
 
-DEFAULT_PEER = "/ip4/198.211.104.50/tcp/4001/p2p/QmWsAFSDajELyneR7LkMsgfaRk2ib1y3SEU7nQuXSNPsQV"
+METADATA_FILE = "metadata.json"
+GATEWAY_IPFS_ID = "/ip4/134.122.126.13/tcp/4001/p2p/12D3KooWM8nN6VbUka1NeuKnu9xcKC56D17ApAVRDyfYNytzUsqG"
+
 ADAPTER_SECRETS = os.getenv("ADAPTER_SECRETS", None)
-IPFS_HOST = os.getenv("IPFS_HOST", None)
+IPFS_HOST = os.getenv("IPFS_HOST", "0.0.0.0:5001")
+DCLIMATE_PEER = os.getenv("V3_PEER", GATEWAY_IPFS_ID)
 if ADAPTER_SECRETS is not None:
     IPFS_HOST = json.loads(ADAPTER_SECRETS).get("IPFS_HOST", IPFS_HOST)
-if not IPFS_HOST:
-    host = "0.0.0.0"
-    port = "5001"
-else:
-    host, port = IPFS_HOST.split(":")
+    DCLIMATE_PEER = json.loads(ADAPTER_SECRETS).get("V3_PEER", DCLIMATE_PEER)
+host, port = IPFS_HOST.split(":")
+IPFS_HOST = f'http://{IPFS_HOST}/api/v0'
 DAEMON_ADDRESS = multiaddr.Multiaddr(f'/dns4/{host}/tcp/{port}/http')
-print(f'DAEMON ADDRESS: {DAEMON_ADDRESS}')
+print(f'dweather IPFS HOST: {IPFS_HOST}')
+print(f'dweather DAEMON ADDRESS: {DAEMON_ADDRESS}')
+print(f'dweather DCLIMATE PEER: {DCLIMATE_PEER}')
 
-METADATA_FILE = "metadata.json"
-# GATEWAY_IPFS_ID = "/ip4/134.122.126.13/tcp/4001/p2p/12D3KooWM8nN6VbUka1NeuKnu9xcKC56D17ApAVRDyfYNytzUsqG"
+
+def refresh_peer(peer) -> None:
+    """Refreshes dClimate IPFS peer"""
+    r = requests.post(f"{IPFS_HOST}/swarm/connect", params={"arg": peer})
+    r.raise_for_status()
+    print(f'peer refreshed: {r.json()}')
 
 
 class IpfsDataset(ABC):
@@ -60,7 +67,11 @@ class IpfsDataset(ABC):
         self.on_gateway = not ipfs_timeout
         # self.ipfs = ipfshttpclient.connect(timeout=ipfs_timeout, session=True)
         self.ipfs = ipfshttpclient.connect(DAEMON_ADDRESS, timeout=ipfs_timeout, session=True)
-        self.ipfs._client.request('/swarm/connect', (DEFAULT_PEER))
+        print(f'connecting to peer at {DCLIMATE_PEER}')
+        # self.ipfs.swarm.connect(multiaddr.Multiaddr(DCLIMATE_PEER))
+        refresh_peer(DCLIMATE_PEER)
+        # self.ipfs._client.request('/swarm/connect', (multiaddr.Multiaddr(DCLIMATE_PEER)))
+        print('peer connected')
         self.as_of = as_of
 
     def __enter__(self):
