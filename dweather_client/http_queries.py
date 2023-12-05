@@ -9,30 +9,14 @@ ADAPTER_SECRETS = os.getenv("ADAPTER_SECRETS", None)
 ARBOL_GATEWAY_URL = os.getenv("ARBOL_GATEWAY_URL", None)
 ARBOL_GATEWAY_USERNAME = os.getenv("ARBOL_GATEWAY_USERNAME", None)
 ARBOL_GATEWAY_PASSWORD = os.getenv("ARBOL_GATEWAY_PASSWORD", None)
-DCLIMATE_API_KEY = os.getenv("DCLIMATE_API_KEY", None)
 if ADAPTER_SECRETS is not None:
     ARBOL_GATEWAY_URL = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_URL", ARBOL_GATEWAY_URL)
     ARBOL_GATEWAY_USERNAME = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_USERNAME", ARBOL_GATEWAY_USERNAME)
     ARBOL_GATEWAY_PASSWORD = json.loads(ADAPTER_SECRETS).get("ARBOL_GATEWAY_PASSWORD", ARBOL_GATEWAY_PASSWORD)
-    DCLIMATE_API_KEY = json.loads(ADAPTER_SECRETS).get("DCLIMATE_API_KEY", DCLIMATE_API_KEY)
 print(f'ARBOL GATEWAY URL: {ARBOL_GATEWAY_URL}')
 GATEWAY_URL = f'https://{ARBOL_GATEWAY_USERNAME}:{ARBOL_GATEWAY_PASSWORD}@{ARBOL_GATEWAY_URL}'
 print(f'GATEWAY URL (length): {len(GATEWAY_URL)}')
-print(f'DCLIMATE API KEY (length): {len(DCLIMATE_API_KEY)}')
 # GATEWAY_URL = 'https://gateway.arbolmarket.com'
-
-
-def get_dclimate_metadata(dataset_name):
-    """
-    Get the metadata file for a dataset name.
-    Args:
-        url (str): the url of the IPFS server
-    """
-    headers = {"Authorization": DCLIMATE_API_KEY}
-    r = requests.get(f"https://api.dclimate.net/apiv3/metadata/{dataset_name}?full_metadata=false", headers=headers)
-    r.raise_for_status()
-    result = r.json()
-    return result
 
 
 def get_heads(url=GATEWAY_URL):
@@ -55,6 +39,7 @@ def get_heads(url=GATEWAY_URL):
     r = requests.get(hashes_url)
     r.raise_for_status()
     return r.json()
+
 
 def get_metadata(hash_str, url=GATEWAY_URL):
     """
@@ -88,6 +73,7 @@ def get_metadata(hash_str, url=GATEWAY_URL):
     r = requests.get(metadata_url)
     r.raise_for_status()
     return r.json()
+
 
 def get_stations_metadata(hash_str, url=GATEWAY_URL):
     """

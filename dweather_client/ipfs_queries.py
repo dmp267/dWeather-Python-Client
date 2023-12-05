@@ -16,7 +16,7 @@ import zipfile
 from dweather_client.ipfs_errors import *
 from dweather_client.grid_utils import conventional_lat_lon_to_cpc, cpc_lat_lon_to_conventional
 from dweather_client.struct_utils import find_closest_lat_lon
-from dweather_client.http_queries import get_heads
+from dweather_client.http_queries import get_heads#, get_metadata as get_meta
 import pandas as pd
 from array import array
 from io import BytesIO
@@ -90,7 +90,11 @@ class IpfsDataset(ABC):
         return:
             metadata as dict
         """
+        # print(f'getting metadata for {h}')
         metadata = self.ipfs.cat(f"{h}/{METADATA_FILE}").decode('utf-8')
+        # metadata = get_meta(h)
+        # print(f'got metadata: {metadata}')
+        # return metadata
         return json.loads(metadata)
 
     def get_file_object(self, f):
